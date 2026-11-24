@@ -1,0 +1,6 @@
+apiVersion: v2
+name: status
+description: Low-dependency status page and API for Schul-Cloud instances
+type: application
+version: 0.1.0
+appVersion: 0.1.0

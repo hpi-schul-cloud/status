@@ -1,0 +1,37 @@
+{{define "public"}}
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Title}}</title><link rel="stylesheet" href="/assets/status.css?v={{assetVersion}}"></head>
+<body>
+<main class="wrap">
+  <header class="brand">
+    {{if .Logo}}<div class="brand-mark"><img class="logo" src="{{.Logo}}" alt="{{.Title}}"></div>{{end}}
+    <div class="brand-copy"><span class="eyebrow">Statusübersicht</span><h1>{{.Title}}</h1><p>{{.Intro}}{{if .SupportEmail}} <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a>{{end}}</p></div>
+  </header>
+  <section class="overall {{.OverallClass}}" aria-live="polite">{{.OverallText}}</section>
+  {{range .Groups}}
+  <section class="group">
+    <h2 class="group-title"><span>{{.Name}}</span><span class="state state-{{.Status}}"><i></i></span></h2>
+    {{range .Items}}<div class="component"><div>{{if .Link}}<a href="{{.Link}}">{{.Name}}</a>{{else}}<strong>{{.Name}}</strong>{{end}}{{if .Description}}<small>{{.Description}}</small>{{end}}{{if .Message}}<small class="message">{{.Message}}</small>{{end}}</div><span class="state state-{{.Status}}"><i></i>{{statusLabel .Status}}</span></div>{{end}}
+  </section>
+  {{end}}
+  {{if .Incidents}}<section class="incidents"><h2>Vergangene Vorfälle</h2>{{range .Incidents}}<article class="incident"><header><strong>{{.ComponentName}}</strong><time datetime="{{.ChangedAt}}">{{formatTime .ChangedAt}}</time></header><p class="incident-state">{{statusLabel .OldStatus}} → {{statusLabel .NewStatus}}</p>{{if .Message}}<p class="incident-message">{{.Message}}</p>{{end}}</article>{{end}}</section>{{end}}
+  <footer>{{if .Imprint}}<a href="{{.Imprint}}">Impressum</a>{{end}}{{if .Privacy}}<a href="{{.Privacy}}">Datenschutz</a>{{end}}<a href="/login">Administration</a></footer>
+</main>
+</body></html>
+{{end}}
+
+{{define "login"}}
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Anmelden · {{.Title}}</title><link rel="stylesheet" href="/assets/status.css?v={{assetVersion}}"></head><body><main class="wrap narrow"><h1>Anmelden</h1>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}<form method="post" action="/login"><label>Benutzername<input name="username" autocomplete="username" required></label><label>Passwort<input type="password" name="password" autocomplete="current-password" required></label><button>Anmelden</button></form><a href="/">Zur Statusseite</a></main></body></html>
+{{end}}
+
+{{define "admin"}}
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administration · {{.Title}}</title><link rel="stylesheet" href="/assets/status.css?v={{assetVersion}}"></head><body><main class="wrap"><header class="admin-head"><div><h1>Administration</h1><p>Angemeldet als {{.Username}} ({{.Role}})</p></div><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="secondary">Abmelden</button></form></header>
+{{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<h2>Komponentenstatus</h2>{{range .Groups}}<section class="group"><h2>{{.Name}}</h2>{{range .Items}}{{$component := .}}<form class="edit-component" method="post" action="/admin/components/{{$component.ID}}"><input type="hidden" name="csrf" value="{{$.CSRF}}"><strong>{{$component.Name}}</strong><select name="status">{{range $.Statuses}}<option value="{{.ID}}" {{if eq .ID $component.Status}}selected{{end}}>{{.Label}}</option>{{end}}</select><textarea name="message" rows="3" maxlength="2000" placeholder="Statusmeldung (optional)">{{$component.Message}}</textarea><button>Speichern</button></form>{{end}}</section>{{end}}
+{{if eq .Role "admin"}}
+<section class="panel"><h2>Benutzer hinzufügen</h2><form method="post" action="/admin/users"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Benutzername<input name="username" required></label><label>Passwort (mindestens 12 Zeichen)<input type="password" name="password" minlength="12" required></label><label>Rolle<select name="role"><option value="operator">Operator</option><option value="admin">Administrator</option></select></label><button>Benutzer anlegen</button></form></section>{{end}}
+<section class="panel"><h2>Eigenes Passwort ändern</h2><form method="post" action="/admin/password"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Aktuelles Passwort<input type="password" name="current_password" autocomplete="current-password" required></label><label>Neues Passwort (mindestens 12 Zeichen)<input type="password" name="new_password" minlength="12" autocomplete="new-password" required></label><button>Passwort ändern</button></form></section>
+<footer><a href="/">Öffentliche Statusseite</a></footer></main></body></html>
+{{end}}

@@ -1,0 +1,35 @@
+name: Test
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            integration-tests/go.sum
+      - name: Check formatting
+        run: make fmt
+      - name: Vet
+        run: make vet
+      - name: Unit tests
+        run: make test
+      - name: PostgreSQL integration tests
+        run: make test-integration
+
+  helm:
+    uses: dBildungsplattform/dbp-github-workflows/.github/workflows/check-helm-kics.yaml@7
+    permissions:
+      contents: read
+    with:
+      chart_path: ./helm/status
