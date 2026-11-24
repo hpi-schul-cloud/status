@@ -49,14 +49,14 @@ type publicPageData struct {
 }
 
 type adminPageData struct {
-	Title     string
-	Username  string
-	Role      string
-	CSRF      string
-	Error     string
-	Notice    string
-	Groups    []store.Group
-	Statuses  []statusOption
+	Title    string
+	Username string
+	Role     string
+	CSRF     string
+	Error    string
+	Notice   string
+	Groups   []store.Group
+	Statuses []statusOption
 }
 
 type statusOption struct {

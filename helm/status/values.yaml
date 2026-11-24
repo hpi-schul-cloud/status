@@ -47,6 +47,7 @@ ingress:
 # not put database credentials in Helm values.
 database:
   existingSecret: ""
+  # kics-scan ignore-line
   secretKey: DATABASE_URL
 
 # Small single-instance PostgreSQL for local/test installs only. Production
@@ -64,6 +65,7 @@ postgresql:
 # These keys must refer to keys in the OnePassword-synced Secret.
 secrets:
   existingSecret: ""
+  # kics-scan ignore-line
   sessionSecretKey: SESSION_SECRET
   bootstrapAdminPasswordKey: BOOTSTRAP_ADMIN_PASSWORD
 bootstrapAdminUser: admin
