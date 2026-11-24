@@ -1,0 +1,109 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/hpi-schul-cloud/status
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: "status"
+fullnameOverride: ""
+
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+  runAsNonRoot: true
+  runAsUser: 10001
+
+service:
+  type: ClusterIP
+  port: 80
+containerPort: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: status.example.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# For external PostgreSQL, put the complete connection string in a Secret; do
+# not put database credentials in Helm values.
+database:
+  existingSecret: ""
+  secretKey: DATABASE_URL
+
+# Small single-instance PostgreSQL for local/test installs only. Production
+# should use a separately managed PostgreSQL instance.
+postgresql:
+  enabled: false
+  image: postgres:18.6-bookworm
+  storage: 1Gi
+  auth:
+    username: status
+    database: status
+    existingSecret: ""
+    passwordKey: DATABASE_PASSWORD
+
+# These keys must refer to keys in the OnePassword-synced Secret.
+secrets:
+  existingSecret: ""
+  sessionSecretKey: SESSION_SECRET
+  bootstrapAdminPasswordKey: BOOTSTRAP_ADMIN_PASSWORD
+bootstrapAdminUser: admin
+
+page:
+  title: "Systemstatus"
+  logoUrl: ""
+  intro: "Hier finden Sie den aktuellen Status unserer Systeme."
+  supportEmail: ""
+  privacyUrl: ""
+  imprintUrl: ""
+  groups: []
+  components: []
+  # Example:
+  # groups:
+  #   - name: "Schul-Cloud Brandenburg"
+  # components:
+  #   - id: kubernetes-infrastruktur
+  #     name: "Kubernetes-Infrastruktur"
+  #     description: ""
+  #     componentGroup: "Schul-Cloud Brandenburg"
+  #     link: ""
+
+cookieSecure: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+extraLabels: {}

@@ -1,0 +1,87 @@
+{{- if .Values.postgresql.enabled }}
+{{- $name := printf "%s-postgresql" (include "status.fullname" .) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "status.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: postgresql
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "status.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: postgresql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: {{ .Values.postgresql.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.auth.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.auth.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "postgresql.auth.existingSecret is required when postgresql.enabled" .Values.postgresql.auth.existingSecret }}
+                  key: {{ .Values.postgresql.auth.passwordKey }}
+            - name: PGDATA
+              value: /var/lib/postgresql/18/docker
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 10
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.storage }}
+{{- end }}

@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "status.fullname" . }}
+  labels:
+    {{- include "status.labels" . | nindent 4 }}
+spec:
+{{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+      {{- include "status.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "status.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "status.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: status
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          env:
+            - name: LISTEN_ADDR
+              value: ":{{ .Values.containerPort }}"
+            - name: COOKIE_SECURE
+              value: {{ .Values.cookieSecure | quote }}
+            - name: STATUS_INITIAL_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "status.fullname" . }}
+                  key: STATUS_INITIAL_CONFIG
+            {{- if .Values.postgresql.enabled }}
+            - name: DATABASE_HOST
+              value: {{ printf "%s-postgresql" (include "status.fullname" .) | quote }}
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_NAME
+              value: {{ .Values.postgresql.auth.database | quote }}
+            - name: DATABASE_USER
+              value: {{ .Values.postgresql.auth.username | quote }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "postgresql.auth.existingSecret is required when postgresql.enabled" .Values.postgresql.auth.existingSecret }}
+                  key: {{ .Values.postgresql.auth.passwordKey }}
+            {{- else }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "database.existingSecret is required" .Values.database.existingSecret }}
+                  key: {{ .Values.database.secretKey }}
+            {{- end }}
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "secrets.existingSecret is required" .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.sessionSecretKey }}
+            - name: BOOTSTRAP_ADMIN_USER
+              value: {{ .Values.bootstrapAdminUser | quote }}
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.bootstrapAdminPasswordKey }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

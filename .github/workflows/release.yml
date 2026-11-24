@@ -1,0 +1,97 @@
+name: Release status service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'helm/status/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: status-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: version
+        name: Check release version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chart_version=$(awk '$1 == "version:" { print $2; exit }' helm/status/Chart.yaml)
+          app_version=$(awk '$1 == "appVersion:" { gsub(/"/, "", $2); print $2; exit }' helm/status/Chart.yaml)
+          if [[ ! "$chart_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || "$chart_version" != "$app_version" ]]; then
+            echo "Chart version and appVersion must match and use X.Y.Z; got $chart_version and $app_version" >&2
+            exit 1
+          fi
+          release_tag="status-$chart_version"
+          if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Version $chart_version has already been released. Bump version and appVersion in helm/status/Chart.yaml." >&2
+            exit 1
+          fi
+          echo "value=$chart_version" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: validate
+    uses: ./.github/workflows/test.yml
+
+  image:
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish image
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ needs.validate.outputs.version }}
+
+  chart:
+    needs: [validate, test, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Configure Git identity
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+      - name: Publish Helm chart and index
+        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # v1.7.0
+        with:
+          charts_dir: helm
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
