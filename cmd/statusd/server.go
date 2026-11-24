@@ -96,6 +96,7 @@ func (a *application) routes() http.Handler {
 	})
 	mux.HandleFunc("GET /api/v1/status", a.publicAPI)
 	mux.HandleFunc("GET /api/v1/components", a.publicAPI)
+	mux.HandleFunc("GET /api/v1/incidents", a.legacyIncidentsAPI)
 	mux.HandleFunc("GET /", a.publicPage)
 	mux.HandleFunc("GET /assets/status.css", func(w http.ResponseWriter, r *http.Request) {
 		css, _ := web.CSS()
@@ -126,6 +127,50 @@ func (a *application) publicAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	status, _, text := overall(groups)
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"page": settings, "status": status, "statusText": text, "groups": groups, "incidents": incidents}})
+}
+
+// legacyIncidentsAPI keeps the read-only contract consumed by SchulCloud's
+// existing alert adapter. It exposes current non-operational components as
+// active incidents; status changes and resolution remain admin-only.
+func (a *application) legacyIncidentsAPI(w http.ResponseWriter, r *http.Request) {
+	_, groups, err := a.db.PublicData(r.Context())
+	if err != nil {
+		a.serverError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"data": legacyIncidents(groups)})
+}
+
+func legacyIncidents(groups []store.Group) []map[string]any {
+	incidents := make([]map[string]any, 0)
+	for _, group := range groups {
+		for _, component := range group.Items {
+			if component.Status == "operational" {
+				continue
+			}
+			status := 1
+			if component.Status == "partial_outage" || component.Status == "major_outage" {
+				status = 2
+			}
+			message := component.Message
+			if message == "" {
+				message = component.Status
+			}
+			incidents = append(incidents, map[string]any{
+				"id": len(incidents) + 1, "component_id": 0,
+				"name": component.Name, "message": message, "status": status,
+				"created_at": component.UpdatedAt, "updated_at": component.UpdatedAt,
+				"deleted_at": nil, "visible": 1, "stickied": false,
+				"occurred_at": component.UpdatedAt, "user_id": 0,
+				"notifications": false, "is_resolved": false,
+				"human_status": component.Status, "latest_update_id": 0,
+				"latest_status": status, "latest_human_status": component.Status,
+				"latest_icon": "", "permalink": "/", "duration": 0,
+			})
+		}
+	}
+	return incidents
 }
 
 func validState(s string) bool {

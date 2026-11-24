@@ -58,6 +58,23 @@ func TestOverallChoosesMostSevereComponentState(t *testing.T) {
 	}
 }
 
+func TestLegacyIncidentsExposeOnlyCurrentNonOperationalComponents(t *testing.T) {
+	groups := []store.Group{{Items: []store.Component{
+		{ID: "api", Name: "API", Status: "major_outage", Message: "Requests are failing", UpdatedAt: "2026-11-24T10:00:00Z"},
+		{ID: "database", Name: "Database", Status: "operational"},
+	}}}
+	incidents := legacyIncidents(groups)
+	if len(incidents) != 1 {
+		t.Fatalf("got %d incidents, want only the active component", len(incidents))
+	}
+	if incidents[0]["component_id"] != 0 || incidents[0]["status"] != 2 || incidents[0]["name"] != "API" || incidents[0]["message"] != "Requests are failing" {
+		t.Fatalf("unexpected incident response: %#v", incidents[0])
+	}
+	if empty := legacyIncidents([]store.Group{{Items: []store.Component{{Status: "operational"}}}}); empty == nil || len(empty) != 0 {
+		t.Fatalf("no active incidents must encode as an empty array, got %#v", empty)
+	}
+}
+
 func TestSessionCookieRejectsModifiedSignature(t *testing.T) {
 	a := &application{sessionKey: []byte("0123456789abcdef0123456789abcdef")}
 	value, err := a.signSession(session{Username: "alice", Role: "admin", CSRF: "csrf", Expires: 9999999999})
